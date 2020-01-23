@@ -208,6 +208,29 @@ def reorder_from_history(list_to_reorder, history):
             reordered_list.append(list_to_reorder[i])
     return reordered_list
 
+def add_extension(name, extension):
+    extension = extension.lower().strip('.')
+    if extension != 'pdf':
+        name += f' [{extension}]'
+    return name
+
+def formatdoc(doc):
+    filename = os.path.basename(doc)
+    name, extension = os.path.splitext(filename)
+    splittedname = name.split(' - ')
+    if len(splittedname) == 1:
+        formattedname = add_extension(name, extension)
+        return formattedname
+    authors = splittedname[0]
+    title = ' - '.join([part.replace('-', ' ') for part in splittedname[1:]])
+    for c in [',', '.', '&', '-']:
+        authors = authors.replace(c, ' ')
+    authors = ' '.join(authors.split())
+    title = title.lower()
+    formattedname = (authors + ' | ' + title)
+    formattedname = add_extension(formattedname, extension)
+    return formattedname
+
 def search(app, dirname):
     if dirname is None:
         with open(dirs_file) as f:
@@ -231,7 +254,7 @@ def search(app, dirname):
 
         lines = ''
         for i, doc in enumerate(doc_paths):
-            lines += f'{i} {os.path.basename(doc)}\n'
+            lines += f'{i} {formatdoc(doc)}\n'
         cmd = 'fzf --with-nth 2.. +s ' + fzfs
         output = subprocess.run(cmd.split(), input=lines, text=True,
                 stdout=subprocess.PIPE).stdout
