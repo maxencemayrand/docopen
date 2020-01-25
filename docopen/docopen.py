@@ -2,8 +2,14 @@ import click
 import os
 import subprocess
 
+from urllib.request import urlopen
+from feedparser import parse
+from shutil import copyfileobj
+import re
+
 config_dir = os.path.expanduser('~/.docopen')
 dirs_file = os.path.join(config_dir, 'directories.txt')
+dflt_file = os.path.join(config_dir, 'default_dir.txt')
 exts_file = os.path.join(config_dir, 'extensions.txt')
 fzfs_file = os.path.join(config_dir, 'fzf_options.txt')
 hist_file = os.path.join(config_dir, 'history.txt')
@@ -16,6 +22,8 @@ def docopen(ctx, app, dirname):
     if not os.path.exists(config_dir):
         os.mkdir(config_dir)
         with open(dirs_file, 'w') as f:
+            pass
+        with open(dflt_file, 'w') as f:
             pass
         with open(exts_file, 'w') as f:
             f.write('pdf\n')
@@ -270,3 +278,83 @@ def search(app, dirname):
                     h.write(file + '\n')
         if len(output) == 0 or dirname is not None:
             break
+
+
+#############
+### ARXIV ###
+#############
+
+def getfeed(arxivid):
+    url = 'http://export.arxiv.org/api/query?id_list=' + arxivid
+    feed = urlopen(url)
+    arxivfeed = parse(feed)['entries'][0]
+    return arxivfeed
+
+def parse_arxiv_feed(arxivfeed):
+    title = arxivfeed['title']
+    authors = [a['name'] for a in arxivfeed['authors']]
+    pdf_url = arxivfeed['links'][1]['href']
+    return title, authors, pdf_url
+
+def change_title(title):
+    # replace spaces with dashes
+    title = title.replace(' ', '-')
+    # replace slaches by dashes
+    title = title.replace('/', '-')
+    # remove multiple occurences of dashes
+    title = re.sub(r'(\W)\1+', r'\1', title)
+    # delete characters
+    for c in ['\n', ',', '.', '$', ':']:
+        title = title.replace(c, '')
+    # lower case
+    title = title.lower()
+
+    return title
+
+def authors_to_string(authors):
+    # Only take the last name
+    modified_authors = []
+    for a in authors:
+        # take last name only
+        a = a.split(' ')[-1].capitalize()
+        # Capitalize
+        a = a.capitalize()
+        modified_authors.append(a)
+    return '-'.join(modified_authors)
+
+def make_pdf_file_name(authors, title, separation=' - '):
+    """
+        authors: list
+        title: string
+        splitting: string
+    """
+    file_name = authors_to_string(authors)
+    file_name += separation
+    file_name += change_title(title)
+    file_name += '.pdf'
+    return file_name
+
+@docopen.command()
+@click.argument('arxivid')
+@click.option('-d', '--dirname', type=click.Path(resolve_path=True))
+def aget(arxivid, dirname):
+    if dirname is None:
+        with open(dflt_file) as f:
+            dirname = f.readline().strip('\n')
+
+    arxivfeed = getfeed(arxivid)
+    title, authors, pdf_url = parse_arxiv_feed(arxivfeed)
+
+    filename = make_pdf_file_name(authors, title)
+    outputfile = os.path.join(dirname, filename)
+
+    # download the pdf
+    req = urlopen(pdf_url)
+    with open(outputfile, 'wb') as fp:
+        copyfileobj(req, fp)
+
+    # print the name of the output file
+    click.echo(outputfile)
+
+    # open the pdf
+    os.system(f'open "{outputfile}"')
