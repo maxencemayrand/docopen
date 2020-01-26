@@ -18,7 +18,9 @@ hist_file = os.path.join(config_dir, 'history.txt')
 @click.pass_context
 @click.option('-a', '--app')
 @click.option('-d', '--dirname', type=click.Path(resolve_path=True))
-def docopen(ctx, app, dirname):
+@click.option('-o', '--stdout', is_flag=True)
+@click.option('-s', '--short', is_flag=True)
+def docopen(ctx, app, dirname, stdout, short):
     if not os.path.exists(config_dir):
         os.mkdir(config_dir)
         with open(dirs_file, 'w') as f:
@@ -35,7 +37,7 @@ def docopen(ctx, app, dirname):
         with open(hist_file, 'w') as f:
             pass
     if ctx.invoked_subcommand is None:
-        search(app, dirname)
+        search(app, dirname, stdout, short)
 
 @docopen.command()
 @click.argument('dirnames', nargs=-1, type=click.Path(resolve_path=True))
@@ -239,7 +241,7 @@ def formatdoc(doc):
     formattedname = add_extension(formattedname, extension)
     return formattedname
 
-def search(app, dirname):
+def search(app, dirname, stdout, short):
     if dirname is None:
         with open(dirs_file) as f:
             dirs = [line.strip('\n') for line in f.readlines()]
@@ -269,7 +271,13 @@ def search(app, dirname):
         if len(output) > 0:
             index = int(output.split()[0])
             file = doc_paths[index]
-            if app == None:
+            if stdout:
+                if short:
+                    click.echo(os.path.basename(file))
+                else:
+                    click.echo(file)
+                break
+            elif app == None:
                 subprocess.run(['open', file])
             else:
                 subprocess.run(['open', '-a' + app, file])
