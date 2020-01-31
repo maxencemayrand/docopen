@@ -1,6 +1,7 @@
 import click
 import os
 import subprocess
+import glob
 
 from urllib.request import urlopen
 from feedparser import parse
@@ -366,3 +367,50 @@ def aget(arxivid, dirname):
 
     # open the pdf
     os.system(f'open "{outputfile}"')
+
+
+###########
+### ldn ###
+###########
+
+def get_lastest_file(directory):
+    files = glob.glob(os.path.join(directory, '*'))
+    if len(files) > 0:
+        lastest_file = max(files, key=os.path.getctime)
+        return lastest_file
+    else:
+        return None
+
+def get_authors_and_title(filename):
+    message = click.edit(text=f'{filename}\nauthors:\n\ntitle:\n',
+                            editor='atom --wait')
+    lines = message.splitlines()
+    authors = lines[2].split()
+    title = lines[4]
+    return authors, title
+
+@docopen.command()
+@click.option('-d', '--dirname', type=click.Path(resolve_path=True))
+@click.option('-s', '--source', type=click.Path(resolve_path=True))
+def ldn(dirname, source):
+    if dirname is None:
+        with open(dflt_file) as f:
+            dirname = f.readline().strip('\n')
+    if source is None:
+        source = os.path.expanduser('~/Downloads')
+
+    last_download = get_lastest_file(source)
+    if last_download is None:
+        click.echo('no file found')
+        raise click.Abort
+    else:
+        click.echo('source: ' + os.path.basename(last_download))
+        click.echo('target: ' + dirname)
+    click.confirm('move?', abort=True, default=True)
+    filename = os.path.splitext(os.path.basename(last_download))[0]
+    authors, title = get_authors_and_title(filename)
+    target = os.path.join(dirname, make_pdf_file_name(authors, title))
+    click.echo(target)
+    os.rename(last_download, target)
+    if open:
+        subprocess.run(['open', target])
