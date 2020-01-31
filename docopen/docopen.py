@@ -19,9 +19,9 @@ hist_file = os.path.join(config_dir, 'history.txt')
 @click.pass_context
 @click.option('-a', '--app')
 @click.option('-d', '--dirname', type=click.Path(resolve_path=True))
-@click.option('-o', '--stdout', is_flag=True)
-@click.option('-s', '--short', is_flag=True)
-def docopen(ctx, app, dirname, stdout, short):
+@click.option('-s', '--stdout', is_flag=True)
+@click.option('-f', '--file')
+def docopen(ctx, app, dirname, stdout, file):
     if not os.path.exists(config_dir):
         os.mkdir(config_dir)
         with open(dirs_file, 'w') as f:
@@ -37,8 +37,10 @@ def docopen(ctx, app, dirname, stdout, short):
             f.write('exact\n')
         with open(hist_file, 'w') as f:
             pass
-    if ctx.invoked_subcommand is None:
-        search(app, dirname, stdout, short)
+    if file is not None:
+        searchfile(file)
+    elif ctx.invoked_subcommand is None:
+        search(app, dirname, stdout)
 
 @docopen.command()
 @click.argument('dirnames', nargs=-1, type=click.Path(resolve_path=True))
@@ -242,7 +244,40 @@ def formatdoc(doc):
     formattedname = add_extension(formattedname, extension)
     return formattedname
 
-def search(app, dirname, stdout, short):
+def searchfile(file):
+    with open(file) as f:
+        docs = sorted(f.read().splitlines(), reverse=True)
+
+    with open(fzfs_file) as f:
+        fzfs = ' '.join(['--' + l  for l in f.readlines()])
+
+    lines = ''
+    for i, doc in enumerate(docs):
+        lines += f'{i} {formatdoc(doc)}\n'
+    cmd = 'fzf --with-nth 2.. +s ' + fzfs
+    output = subprocess.run(cmd.split(), input=lines, text=True,
+            stdout=subprocess.PIPE).stdout
+    if len(output) == 0:
+        return
+    index = int(output.split()[0])
+
+    with open(dirs_file) as f:
+        dirs = [line.strip('\n') for line in f.readlines()]
+
+    with open(exts_file) as f:
+        exts = ['.' + line.strip('\n') for line in f.readlines()]
+
+    for d in dirs:
+        for w in os.walk(d):
+            for l in w[2]:
+                if l == docs[index]:
+                    path = os.path.join(w[0], l)
+                    subprocess.run(['open', path])
+                    return
+    click.echo('file not found')
+
+
+def search(app, dirname, stdout):
     if dirname is None:
         with open(dirs_file) as f:
             dirs = [line.strip('\n') for line in f.readlines()]
@@ -269,14 +304,12 @@ def search(app, dirname, stdout, short):
         cmd = 'fzf --with-nth 2.. +s ' + fzfs
         output = subprocess.run(cmd.split(), input=lines, text=True,
                 stdout=subprocess.PIPE).stdout
+
         if len(output) > 0:
             index = int(output.split()[0])
             file = doc_paths[index]
             if stdout:
-                if short:
-                    click.echo(os.path.basename(file))
-                else:
-                    click.echo(file)
+                click.echo(os.path.basename(file))
                 break
             elif app == None:
                 subprocess.run(['open', file])
