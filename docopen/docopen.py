@@ -240,7 +240,7 @@ def formatdoc(doc):
         authors = authors.replace(c, ' ')
     authors = ' '.join(authors.split())
     title = title.lower()
-    formattedname = (authors + ' | ' + title)
+    formattedname = (authors + '  |  ' + title)
     formattedname = add_extension(formattedname, extension)
     return formattedname
 
