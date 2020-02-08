@@ -416,7 +416,7 @@ def get_lastest_file(directory):
 
 def get_authors_and_title(filename):
     message = click.edit(text=f'{filename}\nauthors:\n\ntitle:\n',
-                            editor='atom --wait')
+                            editor='vim')
     lines = message.splitlines()
     authors = lines[2].split()
     title = lines[4]
