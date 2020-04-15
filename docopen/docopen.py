@@ -15,13 +15,15 @@ exts_file = os.path.join(config_dir, 'extensions.txt')
 fzfs_file = os.path.join(config_dir, 'fzf_options.txt')
 hist_file = os.path.join(config_dir, 'history.txt')
 
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 @click.option('-a', '--app')
 @click.option('-d', '--dirname', type=click.Path(resolve_path=True))
 @click.option('-s', '--stdout', is_flag=True)
 @click.option('-f', '--file')
-def docopen(ctx, app, dirname, stdout, file):
+@click.option('-o/-no', '--order/--no-order', default=True)
+def docopen(ctx, app, dirname, stdout, file, order):
     if not os.path.exists(config_dir):
         os.mkdir(config_dir)
         with open(dirs_file, 'w') as f:
@@ -38,9 +40,10 @@ def docopen(ctx, app, dirname, stdout, file):
         with open(hist_file, 'w') as f:
             pass
     if file is not None:
-        searchfile(file)
+        searchfile(file, order)
     elif ctx.invoked_subcommand is None:
         search(app, dirname, stdout)
+
 
 @docopen.command()
 @click.argument('dirnames', nargs=-1, type=click.Path(resolve_path=True))
@@ -48,6 +51,7 @@ def add(dirnames):
     with open(dirs_file, 'a') as f:
         for d in dirnames:
             f.write(d + '\n')
+
 
 @docopen.command()
 @click.argument('dirnames', nargs=-1, type=click.Path(resolve_path=True))
@@ -59,9 +63,11 @@ def rm(dirnames):
         for d in new_dirs:
             f.write(d + '\n')
 
+
 @docopen.group()
 def extensions():
     pass
+
 
 @extensions.command()
 @click.argument('extensions_names', nargs=-1)
@@ -69,6 +75,7 @@ def add(extensions_names):
     with open(exts_file, 'a') as f:
         for e in extensions_names:
             f.write(e + '\n')
+
 
 @extensions.command()
 @click.argument('extensions_names', nargs=-1)
@@ -80,9 +87,11 @@ def rm(extensions_names):
         for e in exts:
             f.write(e + '\n')
 
+
 @docopen.group()
 def fzf():
     pass
+
 
 @fzf.command()
 @click.argument('fzf_options', nargs=-1)
@@ -90,6 +99,7 @@ def add(fzf_options):
     with open(fzfs_file, 'a') as f:
         for o in fzf_options:
             f.write(o + '\n')
+
 
 @fzf.command()
 @click.argument('fzf_options', nargs=-1)
@@ -101,12 +111,14 @@ def rm(fzf_options):
         for o in fzfs:
             f.write(o + '\n')
 
+
 def show_dirs():
     click.echo()
     click.echo('directories:')
     click.echo('------------')
     with open(dirs_file) as f:
         click.echo(f.read())
+
 
 def show_exts():
     click.echo()
@@ -115,6 +127,7 @@ def show_exts():
     with open(exts_file) as f:
         click.echo(f.read())
 
+
 def show_fzfs():
     click.echo()
     click.echo('fzf options:')
@@ -122,6 +135,7 @@ def show_fzfs():
     with open(fzfs_file) as f:
         for line in f.readlines():
             click.echo(line.strip('\n'))
+
 
 def show_hist(summary=True):
     click.echo()
@@ -135,6 +149,7 @@ def show_hist(summary=True):
     if not summary:
         with open(hist_file) as f:
             click.echo(f.read())
+
 
 @docopen.command()
 @click.option('-a', '--all',       is_flag=True)
@@ -162,6 +177,7 @@ def info(all, directory, extension, fzf_options, history):
         if history:
             show_hist(summary=False)
 
+
 @docopen.command()
 @click.option('-a', '--all',       is_flag=True)
 @click.option('-d', '--directory', is_flag=True)
@@ -186,11 +202,13 @@ def clear(all, directory, extension, fzf_options, history):
         if history:
             open(hist_file, 'w').close()
 
+
 def isdoc(file, exts):
     extension = os.path.splitext(file)[1].lower()
     if extension in exts:
         return True
     return False
+
 
 def get_doc_paths(dirs, exts):
     paths = []
@@ -200,11 +218,13 @@ def get_doc_paths(dirs, exts):
             paths += [os.path.join(w[0], doc) for doc in docs]
     return paths
 
+
 def remove_repetitions(old_list):
     indices = [old_list.index(e) for e in list(set(old_list))]
     indices.sort()
     new_list = [old_list[i] for i in indices]
     return new_list
+
 
 def reorder_from_history(list_to_reorder, history):
     indices = []
@@ -221,11 +241,13 @@ def reorder_from_history(list_to_reorder, history):
             reordered_list.append(list_to_reorder[i])
     return reordered_list
 
+
 def add_extension(name, extension):
     extension = extension.lower().strip('.')
     if extension != 'pdf':
         name += f' [{extension}]'
     return name
+
 
 def formatdoc(doc):
     filename = os.path.basename(doc)
@@ -244,19 +266,24 @@ def formatdoc(doc):
     formattedname = add_extension(formattedname, extension)
     return formattedname
 
-def searchfile(file):
+
+def searchfile(file, order):
     with open(file) as f:
-        docs = sorted(f.read().splitlines(), reverse=True)
+        docs = f.read().splitlines()
+        if order:
+            docs.sort(reverse=True)
+        else:
+            docs = docs[::-1]
 
     with open(fzfs_file) as f:
-        fzfs = ' '.join(['--' + l  for l in f.readlines()])
+        fzfs = ' '.join(['--' + l for l in f.readlines()])
 
     lines = ''
     for i, doc in enumerate(docs):
         lines += f'{i} {formatdoc(doc)}\n'
     cmd = 'fzf --with-nth 2.. +s ' + fzfs
     output = subprocess.run(cmd.split(), input=lines, text=True,
-            stdout=subprocess.PIPE).stdout
+                            stdout=subprocess.PIPE).stdout
     if len(output) == 0:
         return
     index = int(output.split()[0])
@@ -288,7 +315,7 @@ def search(app, dirname, stdout):
         exts = ['.' + line.strip('\n') for line in f.readlines()]
 
     with open(fzfs_file) as f:
-        fzfs = ' '.join(['--' + l  for l in f.readlines()])
+        fzfs = ' '.join(['--' + l for l in f.readlines()])
 
     while True:
         with open(hist_file) as h:
@@ -303,7 +330,7 @@ def search(app, dirname, stdout):
             lines += f'{i} {formatdoc(doc)}\n'
         cmd = 'fzf --with-nth 2.. +s ' + fzfs
         output = subprocess.run(cmd.split(), input=lines, text=True,
-                stdout=subprocess.PIPE).stdout
+                                stdout=subprocess.PIPE).stdout
 
         if len(output) > 0:
             index = int(output.split()[0])
@@ -311,7 +338,7 @@ def search(app, dirname, stdout):
             if stdout:
                 click.echo(os.path.basename(file))
                 break
-            elif app == None:
+            elif app is None:
                 subprocess.run(['open', file])
             else:
                 subprocess.run(['open', '-a' + app, file])
